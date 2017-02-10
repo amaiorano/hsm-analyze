@@ -27,9 +27,9 @@ hsm-analyze c:\code\hsm\samples\hsm_book_samples\source\ch2\process_state_transi
 
 On Windows:
 
-1. Download and install the latest binary distribution of [ClangOnWin from here](https://sourceforge.net/projects/clangonwin/files/MsvcBuild/)
+* Download and install the latest binary distribution of [ClangOnWin from here](https://sourceforge.net/projects/clangonwin/files/MsvcBuild/)
 
-2. Assuming you've installed it to the default location, C:\Program Files\LLVM:
+* Assuming you've installed it to the default location, C:\Program Files\LLVM:
 
 ```
 cd path/to/plot-hsm
@@ -37,4 +37,4 @@ mkdir build && cd build
 cmake -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Program Files\LLVM\lib\cmake\clang" -DUSE_RELEASE_LIBS_IN_DEBUG=On ..
 ```
 
-3. Open the generated sln and build
+* Open the generated sln and build
