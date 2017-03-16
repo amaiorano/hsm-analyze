@@ -74,6 +74,9 @@ enum class TransitionType {
 static const char *TransitionTypeString[] = {"Sibling", "Inner", "InnerEntry",
                                              "No"};
 
+static const char *TransitionTypeVisualString[] = {"--->", "==>>", "===>",
+                                                   "XXXX"};
+
 inline TransitionType fuzzyNameToTransitionType(const StringRef &Name) {
   auto contains = [](auto stringRef, auto s) {
     return stringRef.find(s) != StringRef::npos;
@@ -109,14 +112,14 @@ public:
         auto TransType = fuzzyNameToTransitionType(
             TransitionFuncDecl->getCanonicalDecl()->getName());
 
-        auto StateName = getName(*StateDecl);
+        auto SourceStateName = getName(*StateDecl);
 
         const TemplateArgument &TA = TSI->TemplateArguments->get(0);
         auto TargetStateName = getName(TA);
 
-        llvm::errs() << "State: " << StateName << ", Transitions: "
-                     << TransitionTypeString[static_cast<int>(TransType)]
-                     << " to " << TargetStateName << "\n";
+        llvm::outs() << SourceStateName << " "
+                     << TransitionTypeVisualString[static_cast<int>(TransType)]
+                     << " " << TargetStateName << "\n";
       }
     }
   }
