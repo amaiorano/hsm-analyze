@@ -137,12 +137,15 @@ public:
 
     auto SourceStateName = getName(*StateDecl);
 
-    // We only match transition functions that accept target state as a template
-    // parameter
-    // @TODO: support transition functions that accept StateFactory?
-    assert(TransitionFuncDecl->getTemplateSpecializationInfo());
+    // We currently only support transition functions that accept target state
+    // as a template parameter.
+    // @TODO: support transition functions that accept StateFactory (e.g. state
+    // overrides).
     const auto TSI = TransitionFuncDecl->getTemplateSpecializationInfo();
+    if (!TSI)
+      return;
     const TemplateArgument &TA = TSI->TemplateArguments->get(0);
+
     const auto TargetStateName = getName(TA);
 
     // If our transition is a state arg, we get the top-most transition's
