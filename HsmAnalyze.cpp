@@ -92,17 +92,28 @@ inline TransitionType fuzzyNameToTransitionType(const StringRef &Name) {
   return TransitionType::No;
 }
 
+// Matches declaration of transition functions that actually cause a transition
+// to occur (i.e. everything except NoTransition)
+const auto TransitionFunctionDecl = hasDeclaration(eachOf(
+    functionDecl(hasName("InnerTransition")).bind("trans_func_decl"),
+    functionDecl(hasName("InnerEntryTransition")).bind("trans_func_decl"),
+    functionDecl(hasName("SiblingTransition")).bind("trans_func_decl")));
+
+// Matches transition function expressions (i.e. calls to transition functions)
+const auto TransitionFunctionMatcher = callExpr(
+    expr().bind("call_expr"),
+    // Look for calls to transition functions
+    TransitionFunctionDecl,
+    // We track ancestor call expressions to determine if the call is actually a
+    // state arg
+    anyOf(hasAncestor(
+              callExpr(TransitionFunctionDecl).bind("arg_parent_call_expr")),
+          anything()));
+
+// Matches transition function expressions within states
 const auto StateTransitionMatcher =
-    // Match function calls that return transitions within state-derived classes
-    callExpr(
-        expr().bind("call_expr"),
-        hasType(recordDecl(hasName("hsm::Transition"))),
-        hasDescendant(declRefExpr(to(functionDecl(decl().bind("transfunc"))))),
-        hasAncestor(
-            cxxRecordDecl(decl().bind("state"), isDerivedFrom("hsm::State"))),
-        anyOf(hasAncestor(callExpr().bind(
-                  "arg_parent_call_expr")), // Might be state arg
-              anything()));
+    cxxRecordDecl(decl().bind("state"), isDerivedFrom("hsm::State"),
+                  forEachDescendant(TransitionFunctionMatcher));
 
 class StateTransitionMapper : public MatchFinder::MatchCallback {
   using TargetStateName = std::string;
@@ -110,51 +121,53 @@ class StateTransitionMapper : public MatchFinder::MatchCallback {
 
 public:
   virtual void run(const MatchFinder::MatchResult &Result) {
-    auto TransCallExpr = Result.Nodes.getNodeAs<CallExpr>("call_expr");
-    // auto TransReturnStmt = Result.Nodes.getNodeAs<ReturnStmt>("return_stmt");
-    auto StateDecl = Result.Nodes.getNodeAs<CXXRecordDecl>("state");
-    auto TransitionFuncDecl = Result.Nodes.getNodeAs<FunctionDecl>("transfunc");
-    auto ArgParentCallExpr =
+    const auto StateDecl = Result.Nodes.getNodeAs<CXXRecordDecl>("state");
+    const auto TransCallExpr = Result.Nodes.getNodeAs<CallExpr>("call_expr");
+    const auto TransitionFuncDecl =
+        Result.Nodes.getNodeAs<FunctionDecl>("trans_func_decl");
+    const auto ArgParentCallExpr =
         Result.Nodes.getNodeAs<CallExpr>("arg_parent_call_expr");
 
+    assert(StateDecl);
     assert(TransCallExpr);
+    assert(TransitionFuncDecl);
 
-    if (StateDecl && TransitionFuncDecl) {
-      if (auto TSI = TransitionFuncDecl->getTemplateSpecializationInfo()) {
+    const auto TransType = fuzzyNameToTransitionType(
+        TransitionFuncDecl->getCanonicalDecl()->getName());
 
-        auto TransType = fuzzyNameToTransitionType(
-            TransitionFuncDecl->getCanonicalDecl()->getName());
+    auto SourceStateName = getName(*StateDecl);
 
-        auto SourceStateName = getName(*StateDecl);
+    // We only match transition functions that accept target state as a template
+    // parameter
+    // @TODO: support transition functions that accept StateFactory?
+    assert(TransitionFuncDecl->getTemplateSpecializationInfo());
+    const auto TSI = TransitionFuncDecl->getTemplateSpecializationInfo();
+    const TemplateArgument &TA = TSI->TemplateArguments->get(0);
+    const auto TargetStateName = getName(TA);
 
-        const TemplateArgument &TA = TSI->TemplateArguments->get(0);
-        auto TargetStateName = getName(TA);
+    // If our transition is a state arg, we get the top-most transition's
+    // target state and assume that this target state is the one that will
+    // return the current transition. To do this, we track the top-most
+    // CallExpr -> TargetStateName mapping.
+    if (!ArgParentCallExpr) {
+      // We're top-most, remember current target state
+      assert(_callExprToTargetState.find(TransCallExpr) ==
+             _callExprToTargetState.end());
+      _callExprToTargetState[TransCallExpr] = TargetStateName;
+    } else {
+      // Othwerise, use immediate parent CallExpr's target state as our
+      // source state, and remember it for potential child CallExprs
+      auto iter = _callExprToTargetState.find(ArgParentCallExpr);
+      assert(iter != _callExprToTargetState.end());
+      _callExprToTargetState[TransCallExpr] = iter->second;
 
-        // If our transition is a state arg, we get the top-most transition's
-        // target state and assume that this target state is the one that will
-        // return the current transition. To do this, we track the top-most
-        // CallExpr -> TargetStateName mapping.
-        if (!ArgParentCallExpr) {
-          // We're top-most, remember current target state
-          assert(_callExprToTargetState.find(TransCallExpr) ==
-                 _callExprToTargetState.end());
-          _callExprToTargetState[TransCallExpr] = TargetStateName;
-        } else {
-          // Othwerise, use immediate parent CallExpr's target state as our
-          // source state, and remember it for potential child CallExprs
-          auto iter = _callExprToTargetState.find(ArgParentCallExpr);
-          assert(iter != _callExprToTargetState.end());
-          _callExprToTargetState[TransCallExpr] = iter->second;
-
-          // Override the source state name with the top-most CallExpr one
-          SourceStateName = iter->second;
-        }
-
-        llvm::outs() << SourceStateName << " "
-                     << TransitionTypeVisualString[static_cast<int>(TransType)]
-                     << " " << TargetStateName << "\n";
-      }
+      // Override the source state name with the top-most CallExpr one
+      SourceStateName = iter->second;
     }
+
+    llvm::outs() << SourceStateName << " "
+                 << TransitionTypeVisualString[static_cast<int>(TransType)]
+                 << " " << TargetStateName << "\n";
   }
 };
 
