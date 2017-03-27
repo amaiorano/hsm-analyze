@@ -99,21 +99,18 @@ const auto TransitionFunctionDecl = hasDeclaration(eachOf(
     functionDecl(hasName("InnerEntryTransition")).bind("trans_func_decl"),
     functionDecl(hasName("SiblingTransition")).bind("trans_func_decl")));
 
+// Matches declaration of state-derived classes
+const auto StateDecl =
+    cxxRecordDecl(decl().bind("state"), isDerivedFrom("hsm::State"));
+
 // Matches transition function expressions (i.e. calls to transition functions)
-const auto TransitionFunctionMatcher = callExpr(
-    expr().bind("call_expr"),
-    // Look for calls to transition functions
-    TransitionFunctionDecl,
-    // We track ancestor call expressions to determine if the call is actually a
-    // state arg
+// within member functions of states
+const auto StateTransitionMatcher = callExpr(
+    expr().bind("call_expr"), TransitionFunctionDecl,
+    hasAncestor(cxxMethodDecl(ofClass(StateDecl))),
     anyOf(hasAncestor(
               callExpr(TransitionFunctionDecl).bind("arg_parent_call_expr")),
           anything()));
-
-// Matches transition function expressions within states
-const auto StateTransitionMatcher =
-    cxxRecordDecl(decl().bind("state"), isDerivedFrom("hsm::State"),
-                  forEachDescendant(TransitionFunctionMatcher));
 
 class StateTransitionMapper : public MatchFinder::MatchCallback {
   using TargetStateName = std::string;
