@@ -6,7 +6,12 @@ option(USE_RELEASE_LIBS_IN_DEBUG
 
 if (USE_RELEASE_LIBS_IN_DEBUG)
 	set(LLVM_USE_CRT_DEBUG "MD")
-	add_compile_options(/U_DEBUG)
+	add_definitions(/U_DEBUG)
+endif()
+
+# Clang libs disable exceptions so disable try/catch in MSVC headers
+if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+	add_definitions(/D_HAS_EXCEPTIONS=0)
 endif()
 
 # Find ClangConfig.cmake which will find_package(LLVM)
