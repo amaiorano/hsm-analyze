@@ -77,6 +77,10 @@ static const char *TransitionTypeString[] = {"Sibling", "Inner", "InnerEntry",
 static const char *TransitionTypeVisualString[] = {"--->", "==>>", "===>",
                                                    "XXXX"};
 
+// Multimap of source state name to (transition, target state name) tuples
+using StateTransitionMap =
+    std::multimap<std::string, std::tuple<TransitionType, std::string>>;
+
 inline TransitionType fuzzyNameToTransitionType(const StringRef &Name) {
   auto contains = [](auto stringRef, auto s) {
     return stringRef.find(s) != StringRef::npos;
@@ -113,10 +117,12 @@ const auto StateTransitionMatcher = callExpr(
           anything()));
 
 class StateTransitionMapper : public MatchFinder::MatchCallback {
-  using TargetStateName = std::string;
-  std::map<const CallExpr *, TargetStateName> _callExprToTargetState;
+  std::map<const CallExpr *, std::string> _CallExprToTargetState;
+  StateTransitionMap &_StateTransitionMap;
 
 public:
+  StateTransitionMapper(StateTransitionMap &Map) : _StateTransitionMap(Map) {}
+
   virtual void run(const MatchFinder::MatchResult &Result) {
     const auto StateDecl = Result.Nodes.getNodeAs<CXXRecordDecl>("state");
     const auto TransCallExpr = Result.Nodes.getNodeAs<CallExpr>("call_expr");
@@ -151,23 +157,22 @@ public:
     // CallExpr -> TargetStateName mapping.
     if (!ArgParentCallExpr) {
       // We're top-most, remember current target state
-      assert(_callExprToTargetState.find(TransCallExpr) ==
-             _callExprToTargetState.end());
-      _callExprToTargetState[TransCallExpr] = TargetStateName;
+      assert(_CallExprToTargetState.find(TransCallExpr) ==
+             _CallExprToTargetState.end());
+      _CallExprToTargetState[TransCallExpr] = TargetStateName;
     } else {
       // Othwerise, use immediate parent CallExpr's target state as our
       // source state, and remember it for potential child CallExprs
-      auto iter = _callExprToTargetState.find(ArgParentCallExpr);
-      assert(iter != _callExprToTargetState.end());
-      _callExprToTargetState[TransCallExpr] = iter->second;
+      auto iter = _CallExprToTargetState.find(ArgParentCallExpr);
+      assert(iter != _CallExprToTargetState.end());
+      _CallExprToTargetState[TransCallExpr] = iter->second;
 
       // Override the source state name with the top-most CallExpr one
       SourceStateName = iter->second;
     }
 
-    llvm::outs() << SourceStateName << " "
-                 << TransitionTypeVisualString[static_cast<int>(TransType)]
-                 << " " << TargetStateName << "\n";
+    _StateTransitionMap.insert(std::make_pair(
+        SourceStateName, std::make_tuple(TransType, TargetStateName)));
   }
 };
 
@@ -176,9 +181,23 @@ int main(int argc, const char **argv) {
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
 
-  StateTransitionMapper Mapper;
+  StateTransitionMap Map;
+
+  StateTransitionMapper Mapper(Map);
   MatchFinder Finder;
   Finder.addMatcher(StateTransitionMatcher, &Mapper);
+  auto Result = Tool.run(newFrontendActionFactory(&Finder).get());
+  if (Result != 0) {
+    return Result;
+  }
 
-  return Tool.run(newFrontendActionFactory(&Finder).get());
+  for (auto &kvp : Map) {
+    auto SourceStateName = kvp.first;
+    auto TransType = std::get<0>(kvp.second);
+    auto TargetStateName = std::get<1>(kvp.second);
+
+    llvm::outs() << SourceStateName << " "
+                 << TransitionTypeVisualString[static_cast<int>(TransType)]
+                 << " " << TargetStateName << "\n";
+  }
 }
