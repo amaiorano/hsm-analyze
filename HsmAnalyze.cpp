@@ -176,6 +176,80 @@ public:
   }
 };
 
+// Utility for creating a temporary formatted string
+template <int MaxLength = 1024> class FormatString {
+  char _buffer[MaxLength];
+
+public:
+  FormatString(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int Result = vsnprintf(_buffer, MaxLength, format, args);
+    // If buffer too short, make sure to null terminate it
+    if (Result < 0 || Result >= MaxLength) {
+      _buffer[MaxLength - 1] = '\0';
+    }
+    va_end(args);
+  }
+  const char *value() const { return _buffer; }
+  operator const char *() const { return value(); }
+};
+
+std::string generateDotFileContents(const StateTransitionMap &Map) {
+  auto getAttributesForTransition = [](TransitionType TransType) {
+    auto Weight = 1;
+    auto Color = std::string("black");
+    auto Style = std::string("solid");
+
+    switch (TransType) {
+    case TransitionType::Inner:
+    case TransitionType::InnerEntry:
+      if (TransType == TransitionType::InnerEntry)
+        Style = "bold";
+      break;
+
+    case TransitionType::Sibling:
+      Weight = 50;
+      Style = "dotted";
+      break;
+
+    default:
+      assert(false);
+    }
+
+    std::string Result = FormatString<>(
+        R"([Style="%s", Weight="%d", Color="%s"])", Style, Weight, Color);
+    return Result;
+  };
+
+  auto makeValidDotNodeName = [](std::string name) {
+    size_t index = 0;
+    while ((index = name.find(':', index)) != -1) {
+      name[index] = '_';
+    }
+    return name;
+  };
+
+  std::string Result = "digraph G {\n"
+                       "  nodesep=0.4;\n"
+                       "  fontname=Helvetica;\n";
+
+  for (auto &Kvp : Map) {
+    auto SourceStateName = Kvp.first;
+    auto TransType = std::get<0>(Kvp.second);
+    auto TargetStateName = std::get<1>(Kvp.second);
+
+    Result += FormatString<>("  %s -> %s %s\n",
+                             makeValidDotNodeName(SourceStateName).c_str(),
+                             makeValidDotNodeName(TargetStateName).c_str(),
+                             getAttributesForTransition(TransType).c_str());
+  }
+
+  Result += "}\n";
+
+  return Result;
+}
+
 int main(int argc, const char **argv) {
   CommonOptionsParser OptionsParser(argc, argv, MyToolCategory);
   ClangTool Tool(OptionsParser.getCompilations(),
@@ -191,13 +265,19 @@ int main(int argc, const char **argv) {
     return Result;
   }
 
-  for (auto &kvp : Map) {
-    auto SourceStateName = kvp.first;
-    auto TransType = std::get<0>(kvp.second);
-    auto TargetStateName = std::get<1>(kvp.second);
+  bool PrintMap = false;
+  if (PrintMap) {
+    for (auto &kvp : Map) {
+      auto SourceStateName = kvp.first;
+      auto TransType = std::get<0>(kvp.second);
+      auto TargetStateName = std::get<1>(kvp.second);
 
-    llvm::outs() << SourceStateName << " "
-                 << TransitionTypeVisualString[static_cast<int>(TransType)]
-                 << " " << TargetStateName << "\n";
+      llvm::outs() << SourceStateName << " "
+                   << TransitionTypeVisualString[static_cast<int>(TransType)]
+                   << " " << TargetStateName << "\n";
+    }
   }
+
+  auto DotFileContents = generateDotFileContents(Map);
+  llvm::outs() << DotFileContents;
 }
