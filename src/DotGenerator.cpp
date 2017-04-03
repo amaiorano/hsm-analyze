@@ -2,41 +2,44 @@
 #include "StringHelpers.h"
 #include <cassert>
 
+namespace {
+std::string getAttributesForTransition(TransitionType TransType) {
+  auto Weight = 1;
+  auto Color = std::string("black");
+  auto Style = std::string("solid");
+
+  switch (TransType) {
+  case TransitionType::Inner:
+  case TransitionType::InnerEntry:
+    if (TransType == TransitionType::InnerEntry)
+      Style = "bold";
+    break;
+
+  case TransitionType::Sibling:
+    Weight = 50;
+    Style = "dotted";
+    break;
+
+  default:
+    assert(false);
+  }
+
+  std::string Result = FormatString<>(
+      R"([Style="%s", Weight="%d", Color="%s"])", Style, Weight, Color);
+  return Result;
+};
+
+std::string makeValidDotNodeName(std::string name) {
+  size_t index = 0;
+  while ((index = name.find(':', index)) != -1) {
+    name[index] = '_';
+  }
+  return name;
+};
+}
+
 namespace DotGenerator {
 std::string generateDotFileContents(const StateTransitionMap &Map) {
-  auto getAttributesForTransition = [](TransitionType TransType) {
-    auto Weight = 1;
-    auto Color = std::string("black");
-    auto Style = std::string("solid");
-
-    switch (TransType) {
-    case TransitionType::Inner:
-    case TransitionType::InnerEntry:
-      if (TransType == TransitionType::InnerEntry)
-        Style = "bold";
-      break;
-
-    case TransitionType::Sibling:
-      Weight = 50;
-      Style = "dotted";
-      break;
-
-    default:
-      assert(false);
-    }
-
-    std::string Result = FormatString<>(
-        R"([Style="%s", Weight="%d", Color="%s"])", Style, Weight, Color);
-    return Result;
-  };
-
-  auto makeValidDotNodeName = [](std::string name) {
-    size_t index = 0;
-    while ((index = name.find(':', index)) != -1) {
-      name[index] = '_';
-    }
-    return name;
-  };
 
   std::string Result = "digraph G {\n"
                        "  nodesep=0.4;\n"
