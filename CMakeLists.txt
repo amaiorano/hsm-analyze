@@ -26,9 +26,8 @@ message(STATUS "Using ClangConfig.cmake in: ${CLANG_CMAKE_DIR}")
 list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
 include(HandleLLVMOptions)
 
-add_executable(hsm-analyze
-	src/HsmAnalyze.cpp
-)
+file(GLOB SRC "src/*.cpp" "src/*.h")
+add_executable(hsm-analyze ${SRC})
 
 include_directories(${LLVM_INCLUDE_DIRS})
 target_link_libraries(hsm-analyze PRIVATE clangTooling)
