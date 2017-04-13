@@ -25,7 +25,7 @@ std::string getAttributesForTransition(TransitionType TransType) {
   }
 
   std::string Result = FormatString<>(
-      R"([Style="%s", Weight="%d", Color="%s"])", Style, Weight, Color);
+      R"([style="%s", weight="%d", color="%s"])", Style, Weight, Color);
   return Result;
 };
 
