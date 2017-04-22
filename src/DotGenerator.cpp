@@ -30,7 +30,7 @@ std::string getAttributesForTransition(TransitionType TransType) {
   }
 
   std::string Result = FormatString<>(
-      R"([style="%s", weight="%d", color="%s"])", Style, Weight, Color);
+      R"(style="%s", weight="%d", color="%s")", Style, Weight, Color);
   return Result;
 };
 
@@ -93,6 +93,9 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
   }
 
   // Traverse graph and compute depths
+
+  // Recursive function that computes depths across siblings and inners of input
+  // state
   std::function<void(StateInfo &)> computeDepths = [&](StateInfo &SI) {
     for (auto &Sibling : SI.Siblings) {
       // Sibling state depth is at least as deep as input's
@@ -111,6 +114,17 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
     computeDepths(SI);
   }
 
+  // Returns true if State1 and State2 both making sibling transitons to each
+  // other
+  auto arePingPongSiblings = [&StateInfoMap](std::string State1,
+                                             std::string State2) {
+    auto &SI1 = StateInfoMap[State1];
+    auto &SI2 = StateInfoMap[State2];
+
+    return SI1.Siblings.find(&SI2) != SI1.Siblings.end() &&
+           SI2.Siblings.find(&SI1) != SI2.Siblings.end();
+  };
+
   // Write the dot file header
   std::string Result = "strict digraph G {\n"
                        "  fontname=Helvetica;\n"
@@ -120,20 +134,37 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
                        "";
 
   // Write all the graph edges
+
+  std::set<std::string> PingPongStatesWritten;
+
   for (auto &Kvp : Map) {
     auto SourceStateName = Kvp.first;
     auto TransType = std::get<0>(Kvp.second);
     auto TargetStateName = std::get<1>(Kvp.second);
 
-    Result += FormatString<>("  %s -> %s %s\n",
-                             makeValidDotNodeName(SourceStateName).c_str(),
-                             makeValidDotNodeName(TargetStateName).c_str(),
-                             getAttributesForTransition(TransType).c_str());
+    std::string Attributes = getAttributesForTransition(TransType);
+
+    // If source and target are ping-pong siblings, only write the first edge
+    // with attribute dir="both", which instructs GraphViz to make a
+    // double-ended edge between the two nodes
+    if (arePingPongSiblings(SourceStateName, TargetStateName)) {
+      if (PingPongStatesWritten.find(TargetStateName) !=
+          PingPongStatesWritten.end())
+        continue;
+
+      PingPongStatesWritten.insert(SourceStateName);
+
+      Attributes += R"(, dir="both")";
+    }
+
+    Result += FormatString<>(
+        "  %s -> %s [%s]\n", makeValidDotNodeName(SourceStateName).c_str(),
+        makeValidDotNodeName(TargetStateName).c_str(), Attributes.c_str());
   }
 
   // Now write out subgraphs to set rank per state
 
-  // Transform into a map of depth to state names
+  // Create a map of depth to state names from StateInfoMap
   std::map<int, std::set<std::string>> DepthToState;
   for (auto &Kvp : StateInfoMap) {
     const auto &StateName = Kvp.first;
