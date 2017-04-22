@@ -59,10 +59,12 @@ inline TransitionType fuzzyNameToTransitionType(const StringRef &Name) {
 
 // Matches declaration of transition functions that actually cause a transition
 // to occur (i.e. everything except NoTransition)
-const auto TransitionFunctionDecl = hasDeclaration(eachOf(
-    functionDecl(hasName("InnerTransition")).bind("trans_func_decl"),
-    functionDecl(hasName("InnerEntryTransition")).bind("trans_func_decl"),
-    functionDecl(hasName("SiblingTransition")).bind("trans_func_decl")));
+const auto TransitionFunctionDecl = [](const char *BindName) {
+  return hasDeclaration(
+      eachOf(functionDecl(hasName("InnerTransition")).bind(BindName),
+             functionDecl(hasName("InnerEntryTransition")).bind(BindName),
+             functionDecl(hasName("SiblingTransition")).bind(BindName)));
+};
 
 // Matches declaration of state-derived classes
 const auto StateDecl =
@@ -71,10 +73,10 @@ const auto StateDecl =
 // Matches transition function expressions (i.e. calls to transition functions)
 // within member functions of states
 const auto StateTransitionMatcher = callExpr(
-    expr().bind("call_expr"), TransitionFunctionDecl,
+    expr().bind("call_expr"), TransitionFunctionDecl("trans_func_decl"),
     hasAncestor(cxxMethodDecl(ofClass(StateDecl))),
-    anyOf(hasAncestor(
-              callExpr(TransitionFunctionDecl).bind("arg_parent_call_expr")),
+    anyOf(hasAncestor(callExpr(TransitionFunctionDecl("dummy"))
+                          .bind("arg_parent_call_expr")),
           anything()));
 
 class StateTransitionMapper : public MatchFinder::MatchCallback {
