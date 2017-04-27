@@ -35,19 +35,35 @@ std::string getAttributesForTransition(TransitionType TransType) {
 };
 
 std::string makeValidDotNodeName(std::string name) {
-  size_t index = 0;
-  while ((index = name.find(':', index)) != -1) {
-    name[index] = '_';
+  size_t Index = 0;
+  while ((Index = name.find(':', Index)) != -1) {
+    name[Index] = '_';
+    ++Index;
   }
   return name;
 };
 
 std::string makeFriendlyName(std::string name) {
-  size_t index = name.rfind(':');
-  if (index != -1) {
-    return name.substr(index + 1);
+  size_t Index = name.rfind(':');
+  if (Index != -1) {
+    return name.substr(Index + 1);
   }
   return name;
+}
+
+std::vector<std::string> splitString(std::string S, std::string Sep) {
+  std::vector<std::string> Result;
+  if (S.size() == 0)
+    return Result;
+  size_t Index = 0;
+  size_t LastIndex = 0;
+  while ((Index = S.find(Sep, Index)) != -1) {
+    Result.push_back(S.substr(LastIndex, Index));
+    LastIndex = Index + Sep.size();
+    Index = LastIndex + 1;
+  }
+  Result.push_back(S.substr(LastIndex, S.size() - 1));
+  return Result;
 }
 }
 
@@ -161,36 +177,81 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
         "  %s -> %s [%s]\n", makeValidDotNodeName(SourceStateName).c_str(),
         makeValidDotNodeName(TargetStateName).c_str(), Attributes.c_str());
   }
+  Result += '\n';
 
   // Now write out subgraphs to set rank per state
 
-  // Create a map of depth to state names from StateInfoMap
-  std::map<int, std::set<std::string>> DepthToState;
-  for (auto &Kvp : StateInfoMap) {
-    const auto &StateName = Kvp.first;
-    const auto &SI = Kvp.second;
-    DepthToState[SI._Depth].emplace(StateName);
-  }
+  // We want to create clusters by namespace. The dot file format is quite
+  // flexible when it comes to how it processes clusters: we can repeat the same
+  // cluster hierarchy declarations, the only thing we need to do is make sure
+  // that nodes of the same rank appear together with "rank=same".
 
-  // Now we can write out a subgraph per depth with 'rank=same'. This results in
-  // these states being laid out beside each other in the graph. We also label
-  // the node with a friendlier name.
-  for (const auto &Kvp : DepthToState) {
-    const auto &Depth = Kvp.first;
-    const auto &StateNames = Kvp.second;
+  auto getStateNamespace = [](std::string StateName) -> std::string {
+    int Index = StateName.rfind("::");
+    if (Index != -1) {
+      return StateName.substr(0, Index);
+    }
+    return "";
+  };
 
-    Result += FormatString<>("  subgraph {\n"
-                             "    rank=same // depth=%d\n",
-                             Depth);
+  while (!StateInfoMap.empty()) {
 
-    for (const auto &StateName : StateNames) {
+    std::string CurrNamespace = getStateNamespace(StateInfoMap.begin()->first);
 
-      Result += FormatString<>("    %s [label=\"%s\"]\n",
-                               makeValidDotNodeName(StateName).c_str(),
-                               makeFriendlyName(StateName).c_str());
+    // Collect all StateInfoMap entries for the current namespace, moving them
+    // into StateInfoMap2. The outer loop will end once all entries have been
+    // moved and processed.
+    decltype(StateInfoMap) StateInfoMap2;
+    for (auto iter = StateInfoMap.begin(); iter != StateInfoMap.end();) {
+      if (getStateNamespace(iter->first) == CurrNamespace) {
+        StateInfoMap2.insert(*iter);
+        iter = StateInfoMap.erase(iter);
+      } else {
+        ++iter;
+      }
     }
 
-    Result += "  }\n";
+    // Create a map of depth to state names from StateInfoMap2
+    std::map<int, std::set<std::string>> DepthToState;
+    for (auto &Kvp : StateInfoMap2) {
+      const auto &StateName = Kvp.first;
+      const auto &SI = Kvp.second;
+      DepthToState[SI._Depth].emplace(StateName);
+    }
+
+    // Finally, write out subgraphs per depth with 'rank=same', each within its
+    // own namespace cluster. This results in these states being laid out beside
+    // each other in the graph. We also label the node with a friendlier name.
+    for (const auto &Kvp : DepthToState) {
+      const auto &Depth = Kvp.first;
+      const auto &StateNames = Kvp.second;
+
+      // Open up a cluster per namespace part
+      // TODO: indent output for readability
+      auto NamespaceParts = splitString(CurrNamespace, "::");
+      for (auto Part : NamespaceParts) {
+        Result += FormatString<>(
+            "subgraph cluster_%s { label = \"%s\"; labeljust=left;\n",
+            Part.c_str(), Part.c_str());
+      }
+
+      // Write subgraphs for states of same depth
+      Result += FormatString<>("  subgraph {\n"
+                               "    rank=same // depth=%d\n",
+                               Depth);
+      for (const auto &StateName : StateNames) {
+
+        Result += FormatString<>("    %s [label=\"%s\"]\n",
+                                 makeValidDotNodeName(StateName).c_str(),
+                                 makeFriendlyName(StateName).c_str());
+      }
+      Result += "  }\n";
+
+      // Close clusters
+      for (auto Part : NamespaceParts) {
+        Result += "}\n";
+      }
+    }
   }
 
   // Write footer
