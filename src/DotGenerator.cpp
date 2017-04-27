@@ -58,11 +58,11 @@ std::vector<std::string> splitString(std::string S, std::string Sep) {
   size_t Index = 0;
   size_t LastIndex = 0;
   while ((Index = S.find(Sep, Index)) != -1) {
-    Result.push_back(S.substr(LastIndex, Index));
+    Result.push_back(S.substr(LastIndex, Index - LastIndex));
     LastIndex = Index + Sep.size();
     Index = LastIndex + 1;
   }
-  Result.push_back(S.substr(LastIndex, S.size() - 1));
+  Result.push_back(S.substr(LastIndex, std::string::npos));
   return Result;
 }
 }
