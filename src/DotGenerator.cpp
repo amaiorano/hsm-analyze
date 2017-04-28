@@ -231,26 +231,27 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
       auto NamespaceParts = splitString(CurrNamespace, "::");
       for (auto Part : NamespaceParts) {
         Result += FormatString<>(
-            "subgraph cluster_%s { label = \"%s\"; labeljust=left;\n",
+            "  subgraph cluster_%s { label = \"%s\"; labeljust=left;\n",
             Part.c_str(), Part.c_str());
       }
 
       // Write subgraphs for states of same depth
-      Result += FormatString<>("  subgraph {\n"
-                               "    rank=same // depth=%d\n",
+      Result += FormatString<>("    subgraph {\n"
+                               "      rank=same // depth=%d\n",
                                Depth);
-      for (const auto &StateName : StateNames) {
 
-        Result += FormatString<>("    %s [label=\"%s\"]\n",
+      for (const auto &StateName : StateNames) {
+        Result += FormatString<>("      %s [label=\"%s\"]\n",
                                  makeValidDotNodeName(StateName).c_str(),
                                  makeFriendlyName(StateName).c_str());
       }
-      Result += "  }\n";
+      Result += "    }\n";
 
       // Close clusters
-      for (auto Part : NamespaceParts) {
-        Result += "}\n";
-      }
+      Result += "  ";
+      for (auto Part : NamespaceParts)
+        Result += "}";
+      Result += "\n\n";
     }
   }
 
