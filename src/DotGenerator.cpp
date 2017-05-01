@@ -32,7 +32,7 @@ std::string getAttributesForTransition(TransitionType TransType) {
   std::string Result = FormatString<>(
       R"(style="%s", weight="%d", color="%s")", Style, Weight, Color);
   return Result;
-};
+}
 
 std::string makeValidDotNodeName(std::string name) {
   size_t Index = 0;
@@ -41,7 +41,7 @@ std::string makeValidDotNodeName(std::string name) {
     ++Index;
   }
   return name;
-};
+}
 
 std::string makeFriendlyName(std::string name) {
   size_t Index = name.rfind(':');
@@ -64,6 +64,32 @@ std::vector<std::string> splitString(std::string S, std::string Sep) {
   }
   Result.push_back(S.substr(LastIndex, std::string::npos));
   return Result;
+}
+
+template <typename T> T lerp(T V, T Min, T Max) {
+  T Range = Max - Min;
+  if (Range == 0) {
+    assert(V == Min && V == Max);
+    return 0;
+  }
+  return (V - Min) / (Max - Min);
+}
+
+template <typename T, typename U>
+U remap(T SourceVal, T SourceMin, T SourceMax, U TargetMin, U TargetMax) {
+  float Ratio = lerp<float>(SourceVal, SourceMin, SourceMax);
+  float Result = TargetMin + Ratio * (TargetMax - TargetMin);
+  return static_cast<U>(Result);
+}
+
+template <typename TargetType, typename SourceType>
+TargetType hash(const SourceType &Val) {
+  size_t Hash = std::hash<SourceType>()(Val);
+  return Hash % std::numeric_limits<TargetType>::max();
+}
+
+template <typename T> constexpr T maxValue(T &V) {
+  return std::numeric_limits<T>::max();
 }
 }
 
@@ -219,6 +245,15 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
       DepthToState[SI._Depth].emplace(StateName);
     }
 
+    // Determine min/max depth
+    auto MinMaxDepth =
+        std::minmax_element(StateInfoMap2.begin(), StateInfoMap2.end(),
+                            [](const auto &P1, const auto &P2) {
+                              return P1.second._Depth < P2.second._Depth;
+                            });
+    const int MinDepth = MinMaxDepth.first->second._Depth;
+    const int MaxDepth = MinMaxDepth.second->second._Depth;
+
     // Finally, write out subgraphs per depth with 'rank=same', each within its
     // own namespace cluster. This results in these states being laid out beside
     // each other in the graph. We also label the node with a friendlier name.
@@ -241,9 +276,32 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
                                Depth);
 
       for (const auto &StateName : StateNames) {
-        Result += FormatString<>("      %s [label=\"%s\"]\n",
+        std::string StateAttributes = FormatString<>(
+            R"(label="%s")", makeFriendlyName(StateName).c_str());
+
+        static bool EnableColor = true;
+        if (EnableColor) {
+          // Hue
+          float MinH = 0.f;
+          float MaxH = 1.f;
+          auto Hash = hash<uint32_t>(CurrNamespace);
+          float H = remap(Hash, 0u, maxValue(Hash), MinH, MaxH);
+
+          // Saturation
+          float S = 0.5f;
+
+          // Value (aka Brightness)
+          float MinV = 0.25f;
+          float MaxV = 0.7f;
+          float V = remap(Depth, MinDepth, MaxDepth, MinV, MaxV);
+
+          StateAttributes += FormatString<>(
+              R"(fontcolor=white, style=filled, color="%f %f %f")", H, S, V);
+        }
+
+        Result += FormatString<>("      %s [%s]\n",
                                  makeValidDotNodeName(StateName).c_str(),
-                                 makeFriendlyName(StateName).c_str());
+                                 StateAttributes.c_str());
       }
       Result += "    }\n";
 
