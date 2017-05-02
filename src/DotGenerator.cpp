@@ -170,9 +170,11 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
     }
   };
 
-  for (auto &Kvp : StateInfoMap) {
-    auto &SI = Kvp.second;
-    computeDepths(SI);
+  for (int i = 0; i < 100; ++i) { // TODO: Run until no depths change anymore
+    for (auto &Kvp : StateInfoMap) {
+      auto &SI = Kvp.second;
+      computeDepths(SI);
+    }
   }
 
   // Returns true if State1 and State2 both making sibling transitons to each
