@@ -2,12 +2,29 @@
 #include "StringHelpers.h"
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <functional>
 #include <map>
 #include <set>
 #include <vector>
 
 namespace {
+// TODO: move to StringHelpers
+std::vector<std::string> splitString(const std::string &S, std::string Sep) {
+  std::vector<std::string> Result;
+  if (S.size() == 0)
+    return Result;
+  size_t Index = 0;
+  size_t LastIndex = 0;
+  while ((Index = S.find(Sep, Index)) != -1) {
+    Result.push_back(S.substr(LastIndex, Index - LastIndex));
+    LastIndex = Index + Sep.size();
+    Index = LastIndex + 1;
+  }
+  Result.push_back(S.substr(LastIndex, std::string::npos));
+  return Result;
+}
+
 std::string getAttributesForTransition(TransitionType TransType) {
   auto Weight = 1;
   auto Color = std::string("black");
@@ -35,54 +52,46 @@ std::string getAttributesForTransition(TransitionType TransType) {
 }
 
 // Replaces all invalid characters with underscores
-std::string makeValidDotNodeName(std::string name) {
-  // TODO: make this cleaner and more efficient
-  size_t Index = 0;
-  while ((Index = name.find(':', Index)) != -1) {
-    name[Index] = '_';
-    ++Index;
+std::string makeValidDotNodeName(std::string Name) {
+  for (size_t i = 0; i < Name.size(); ++i) {
+    if (!isalnum(Name[i]))
+      Name[i] = '_';
   }
-  Index = 0;
-  while ((Index = name.find('<', Index)) != -1) {
-    name[Index] = '_';
-    ++Index;
+  return Name;
+}
+
+// Returns the namespace portion of a fully qualified type name
+// e.g. A::B::C<D> returns A::B
+// e.g. A::B<C<D::E::F>>::G returns A
+// NOTE: assumes no templated namespaces, e.g. A<B>::StateName will fail to
+// return StateName.
+std::string getNamespace(const std::string &Name) {
+  size_t EndIndex = Name.find('<');
+  if (EndIndex == -1)
+    EndIndex = Name.size();
+
+  int Index = Name.rfind("::", EndIndex - 1);
+  if (Index != -1) {
+    return Name.substr(0, Index);
   }
-  Index = 0;
-  while ((Index = name.find('>', Index)) != -1) {
-    name[Index] = '_';
-    ++Index;
-  }
-  return name;
+  return "";
 }
 
 // Removes namespaces and returns only the final type name
 // e.g. A::B::C<D> returns C<D>
-// e.g. A::B<C<D::E::F>>::G return B<C<D::E::F>>::G
-std::string makeFriendlyName(std::string name) {
+// e.g. A::B<C<D::E::F>>::G returns B<C<D::E::F>>::G
+// NOTE: assumes no templated namespaces, e.g. A<B>::StateName will fail to
+// return StateName.
+std::string makeFriendlyName(const std::string &Name) {
   // Basically we return the substring starting from the last ':' before the
   // first '<'
-  size_t EndIndex = name.find('<');
+  size_t EndIndex = Name.find('<');
   if (EndIndex == -1)
-    EndIndex = name.size();
-  size_t Index = name.rfind(':', EndIndex - 1);
+    EndIndex = Name.size();
+  size_t Index = Name.rfind(':', EndIndex - 1);
   if (Index != -1)
-    return name.substr(Index + 1);
-  return name;
-}
-
-std::vector<std::string> splitString(std::string S, std::string Sep) {
-  std::vector<std::string> Result;
-  if (S.size() == 0)
-    return Result;
-  size_t Index = 0;
-  size_t LastIndex = 0;
-  while ((Index = S.find(Sep, Index)) != -1) {
-    Result.push_back(S.substr(LastIndex, Index - LastIndex));
-    LastIndex = Index + Sep.size();
-    Index = LastIndex + 1;
-  }
-  Result.push_back(S.substr(LastIndex, std::string::npos));
-  return Result;
+    return Name.substr(Index + 1);
+  return Name;
 }
 
 template <typename T> T lerp(T V, T Min, T Max) {
@@ -233,24 +242,16 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
   // cluster hierarchy declarations, the only thing we need to do is make sure
   // that nodes of the same rank appear together with "rank=same".
 
-  auto getStateNamespace = [](std::string StateName) -> std::string {
-    int Index = StateName.rfind("::");
-    if (Index != -1) {
-      return StateName.substr(0, Index);
-    }
-    return "";
-  };
-
   while (!StateInfoMap.empty()) {
 
-    std::string CurrNamespace = getStateNamespace(StateInfoMap.begin()->first);
+    std::string CurrNamespace = getNamespace(StateInfoMap.begin()->first);
 
     // Collect all StateInfoMap entries for the current namespace, moving them
     // into StateInfoMap2. The outer loop will end once all entries have been
     // moved and processed.
     decltype(StateInfoMap) StateInfoMap2;
     for (auto iter = StateInfoMap.begin(); iter != StateInfoMap.end();) {
-      if (getStateNamespace(iter->first) == CurrNamespace) {
+      if (getNamespace(iter->first) == CurrNamespace) {
         StateInfoMap2.insert(*iter);
         iter = StateInfoMap.erase(iter);
       } else {
