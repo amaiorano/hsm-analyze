@@ -32,7 +32,7 @@ On Windows:
 * Assuming you've installed it to the default location, C:\Program Files\LLVM:
 
 ```
-cd path/to/plot-hsm
+cd path/to/hsm-analyze
 mkdir build && cd build
 cmake -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Program Files\LLVM\lib\cmake\clang" -DUSE_RELEASE_LIBS_IN_DEBUG=On ..
 ```
