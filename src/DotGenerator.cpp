@@ -34,20 +34,39 @@ std::string getAttributesForTransition(TransitionType TransType) {
   return Result;
 }
 
+// Replaces all invalid characters with underscores
 std::string makeValidDotNodeName(std::string name) {
+  // TODO: make this cleaner and more efficient
   size_t Index = 0;
   while ((Index = name.find(':', Index)) != -1) {
+    name[Index] = '_';
+    ++Index;
+  }
+  Index = 0;
+  while ((Index = name.find('<', Index)) != -1) {
+    name[Index] = '_';
+    ++Index;
+  }
+  Index = 0;
+  while ((Index = name.find('>', Index)) != -1) {
     name[Index] = '_';
     ++Index;
   }
   return name;
 }
 
+// Removes namespaces and returns only the final type name
+// e.g. A::B::C<D> returns C<D>
+// e.g. A::B<C<D::E::F>>::G return B<C<D::E::F>>::G
 std::string makeFriendlyName(std::string name) {
-  size_t Index = name.rfind(':');
-  if (Index != -1) {
+  // Basically we return the substring starting from the last ':' before the
+  // first '<'
+  size_t EndIndex = name.find('<');
+  if (EndIndex == -1)
+    EndIndex = name.size();
+  size_t Index = name.rfind(':', EndIndex - 1);
+  if (Index != -1)
     return name.substr(Index + 1);
-  }
   return name;
 }
 
@@ -91,7 +110,7 @@ TargetType hash(const SourceType &Val) {
 template <typename T> constexpr T maxValue(T &V) {
   return std::numeric_limits<T>::max();
 }
-}
+} // namespace
 
 namespace DotGenerator {
 std::string generateDotFileContents(const StateTransitionMap &Map) {
@@ -267,7 +286,7 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
       for (auto Part : NamespaceParts) {
         Result += FormatString<>(
             "  subgraph cluster_%s { label = \"%s\"; labeljust=left;\n",
-            Part.c_str(), Part.c_str());
+            makeValidDotNodeName(Part).c_str(), Part.c_str());
       }
 
       // Write subgraphs for states of same depth
@@ -318,4 +337,4 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
 
   return Result;
 }
-}
+} // namespace DotGenerator
