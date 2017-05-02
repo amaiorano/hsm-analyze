@@ -201,8 +201,7 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
   std::string Result = "strict digraph G {\n"
                        "  fontname=Helvetica;\n"
                        "  nodesep=0.6;\n"
-                       //"  node [shape=box]\n"
-                       //"  rankdir=LR\n"
+                       "  //rankdir=LR\n"
                        "";
 
   // Write all the graph edges
@@ -318,7 +317,7 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
           float V = remap(Depth, MinDepth, MaxDepth, MinV, MaxV);
 
           StateAttributes += FormatString<>(
-              R"(fontcolor=white, style=filled, color="%f %f %f")", H, S, V);
+              R"(, fontcolor=white, style=filled, color="%f %f %f")", H, S, V);
         }
 
         Result += FormatString<>("      %s [%s]\n",
