@@ -170,6 +170,15 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
     for (auto &Sibling : SI.Siblings) {
       // Sibling state depth is at least as deep as input's
       Sibling->_Depth = std::max(Sibling->_Depth, SI._Depth);
+
+      // Do the same in the other direction to handle "stranded" states that
+      // sibling to another state, but do not themselves get transitioned to
+      auto Old = SI._Depth;
+      SI._Depth = std::max(SI._Depth, Sibling->_Depth);
+      if (Old != SI._Depth) {
+        int a = 1;
+        a = a;
+      }
     }
 
     for (auto &Inner : SI.Inners) {
