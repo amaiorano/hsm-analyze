@@ -164,8 +164,8 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
 
   // Traverse graph and compute depths
 
-  // Recursive function that computes depths across siblings and inners of input
-  // state
+  // Recursive function that computes and sets depths across siblings and inners
+  // of input state
   std::function<void(StateInfo &)> computeDepths = [&](StateInfo &SI) {
     for (auto &Sibling : SI.Siblings) {
       // Sibling state depth is at least as deep as input's
@@ -179,12 +179,23 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
     }
   };
 
-  for (int i = 0; i < 100; ++i) { // TODO: Run until no depths change anymore
+  // Keep computing depths across all StateInfos until no more depths are
+  // changed
+  bool DepthChanged = false;
+  do {
+    auto LastStateInfoMap = StateInfoMap;
+
     for (auto &Kvp : StateInfoMap) {
       auto &SI = Kvp.second;
       computeDepths(SI);
     }
-  }
+
+    DepthChanged =
+        !std::equal(StateInfoMap.begin(), StateInfoMap.end(),
+                    LastStateInfoMap.begin(), [](auto &p1, auto &p2) {
+                      return p1.second._Depth == p2.second._Depth;
+                    });
+  } while (DepthChanged);
 
   // Returns true if State1 and State2 both making sibling transitons to each
   // other
