@@ -1,2 +1,5 @@
 # CMake out-of-source build directories
 build*/
+
+# Visual Studio artifacts
+.vs/
