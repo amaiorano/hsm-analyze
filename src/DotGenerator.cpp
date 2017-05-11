@@ -4,8 +4,11 @@
 #include <cassert>
 #include <cctype>
 #include <functional>
+#include <iostream>
+#include <iterator>
 #include <map>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace {
@@ -180,8 +183,9 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
   };
 
   // Keep computing depths across all StateInfos until no more depths are
-  // changed
+  // changed (i.e. until all depths have "settled")
   bool DepthChanged = false;
+  const int INVALID_GRAPH_DEPTH = 1000;
   do {
     auto LastStateInfoMap = StateInfoMap;
 
@@ -195,6 +199,37 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
                     LastStateInfoMap.begin(), [](auto &p1, auto &p2) {
                       return p1.second._Depth == p2.second._Depth;
                     });
+
+    const bool InvalidGraphDepth =
+        std::find_if(StateInfoMap.begin(), StateInfoMap.end(), [&](auto &p) {
+          return p.second._Depth >= INVALID_GRAPH_DEPTH;
+        }) != StateInfoMap.end();
+
+    if (InvalidGraphDepth) {
+      std::string ErrorMessage = "Detected invalid graph depth. The most "
+                                 "likely reason is that a state is both a "
+                                 "sibling and an inner of a state or set of "
+                                 "states. Possible offending states:\n";
+
+      // Collect states with large depths that probably have some invalid
+      // transitions going on
+      decltype(StateInfoMap) InvalidStateInfoMap;
+      std::copy_if(
+          StateInfoMap.begin(), StateInfoMap.end(),
+          std::inserter(InvalidStateInfoMap, InvalidStateInfoMap.end()),
+          [&](auto &p) {
+            return p.second._Depth >= INVALID_GRAPH_DEPTH; // -100;
+          });
+      for (auto &p : InvalidStateInfoMap) {
+        ErrorMessage += p.first + "\n";
+      }
+
+      std::cerr << ErrorMessage;
+
+      // TODO: return invalid status
+      return "";
+    }
+
   } while (DepthChanged);
 
   // Returns true if State1 and State2 both making sibling transitons to each
