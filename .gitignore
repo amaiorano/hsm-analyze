@@ -1,5 +1,24 @@
 # CMake out-of-source build directories
 build*/
 
-# Visual Studio artifacts
+# Visual Studio
 .vs/
+*.suo
+*.user
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+x64/
+build*/
+bld/
+[Bb]in/
+[Oo]bj/
+ipch/
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.psess
+*.vsp
+*.vspx
