@@ -1,3 +1,4 @@
+#include "clang/Basic/Version.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
@@ -12,6 +13,8 @@ using namespace clang::ast_matchers;
 using namespace clang::tooling;
 using namespace llvm;
 
+const char *ToolName = "hsm-analyze";
+const char *ToolVersiona = "1.0.0.0";
 static const char *ToolDescription = "A tool that analyzes C++ code that makes "
                                      "use of the HSM library "
                                      "(https://github.com/amaiorano/hsm)\n";
@@ -27,7 +30,13 @@ static cl::opt<bool>
 
 static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 
+static void PrintVersion() {
+  outs() << ToolName << " " << ToolVersiona << '\n';
+}
+
 int main(int argc, const char **argv) {
+  cl::AddExtraVersionPrinter(PrintVersion);
+
   CommonOptionsParser OptionsParser(argc, argv, HsmAnalyzeCategory,
                                     ToolDescription);
 
