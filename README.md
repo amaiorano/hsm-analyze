@@ -8,13 +8,17 @@ hsm-analyze is a tool based on [Clang LibTooling](https://clang.llvm.org/docs/Li
 
 ## Usage
 
-- Install the latest distribution of LLVM (Windows: [here](http://releases.llvm.org/download.html) or [here](https://sourceforge.net/projects/clangonwin/files/MsvcBuild/) if you plan to compile hsm-analyze).
+These instructions are for Windows. For Linux or Mac, follow instructions for how to build hsm-analyze (below) and adapt as necessary.
 
-- [Download](https://link/to/releases/here) (or build) the latest version of hsm-analyze, and copy the single executable to your LLVM/bin directory (e.g. ```C:\Program Files\LLVM\bin``` on Windows). This is required for most LibTooling-based tools to access the Clang core headers.
+- [Download](https://link/to/releases/here) the latest version of hsm-analyze.
+
+- Install a distribution of LLVM that matches the LLVM version that was used to build hsm-analyze from [here (recommended)](https://sourceforge.net/projects/clangonwin/files/MsvcBuild/) or [here](http://releases.llvm.org/download.html).
+
+- Copy the single hsm-analyze executable to your LLVM/bin directory (e.g. ```C:\Program Files\LLVM\bin```). This is required for most LibTooling-based tools to access Clang's C++ standard headers.
 
 - Install [GraphViz](http://www.graphviz.org/Download.php) to render state machines graphs.
 
-Like all Clang tools based on LibTooling, hsm-analyze can either use a compilation database, or you can pass compilation arguments via command line following a double-dash ("--"). Read more about how to use a compilation database [here](https://clang.llvm.org/docs/HowToSetupToolingForLLVM.html). 
+Like all Clang tools based on LibTooling, you can pass compilation arguments to hsm-analyze via command line following a double-dash ("--"), or by using a compilation database (read about how to generate and use a compilation database [here](https://clang.llvm.org/docs/HowToSetupToolingForLLVM.html)).
 
 Here's an example of how to output a GraphViz dot file from a cpp file:
 
@@ -76,14 +80,19 @@ which produces the following png:
 
 On Windows:
 
-* Download and install the latest binary distribution of [ClangOnWin from here](https://sourceforge.net/projects/clangonwin/files/MsvcBuild/)
+* Download and install the a binary distribution of [ClangOnWin](https://sourceforge.net/projects/clangonwin/files/MsvcBuild/). **NOTE:** At the time of this writing, hsm-analyze successfully builds with VS2015 and VS2017 against [LLVM-4.0.0svn-r277264-require-python35dll-win64](https://freefr.dl.sourceforge.net/project/clangonwin/MsvcBuild/4.0/LLVM-4.0.0svn-r277264-require-python35dll-win64.exe) and [LLVM-5.0.0svn-r302983-win64](https://ayera.dl.sourceforge.net/project/clangonwin/MsvcBuild/5.0/LLVM-5.0.0svn-r302983-win64.exe).
 
-* Assuming you've installed it to the default location, C:\Program Files\LLVM:
+* Assuming you've installed it to the default location, C:\Program Files\LLVM, here's how you'd build hsm-analyze with Visual Studio 2015:
 
 ```
-cd path/to/hsm-analyze
+git clone https://github.com/amaiorano/hsm-analyze.git
+cd hsm-analyze
 mkdir build && cd build
-cmake -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Program Files\LLVM\lib\cmake\clang" -DUSE_RELEASE_LIBS_IN_DEBUG=On ..
+cmake -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Program Files\LLVM\lib\cmake" -DUSE_RELEASE_LIBS_IN_DEBUG=On ..
 ```
+
+**NOTE:** The CMake variable ```USE_RELEASE_LIBS_IN_DEBUG``` is needed to build hsm-analyze in the Debug configuration against the ClangOnWin libraries since ClangOnWin does not include Debug libs.
+
+**NOTE:** If the LLVM/Clang libs you want to link against use the MSVC CRT static libraries (rather than DLLs), you can enable the CMake variable ```USE_STATIC_CRT```.
 
 * Open the generated sln and build
