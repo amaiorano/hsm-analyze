@@ -10,7 +10,7 @@ hsm-analyze is a tool based on [Clang LibTooling](https://clang.llvm.org/docs/Li
 
 These instructions are for Windows. For Linux or Mac, follow instructions for how to build hsm-analyze (below) and adapt as necessary.
 
-- [Download](https://link/to/releases/here) the latest version of hsm-analyze.
+- [Download](https://github.com/amaiorano/hsm-analyze/releases) the latest version of hsm-analyze.
 
 - Install a distribution of LLVM that matches the LLVM version that was used to build hsm-analyze from [here (recommended)](https://sourceforge.net/projects/clangonwin/files/MsvcBuild/) or [here](http://releases.llvm.org/download.html).
 
