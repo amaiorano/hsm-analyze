@@ -239,7 +239,8 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
     auto &SI1 = StateInfoMap[State1];
     auto &SI2 = StateInfoMap[State2];
 
-    return SI1.Siblings.find(&SI2) != SI1.Siblings.end() &&
+    return (&SI1 != &SI2) // Ignore transition to self (a "state restart")
+           && SI1.Siblings.find(&SI2) != SI1.Siblings.end() &&
            SI2.Siblings.find(&SI1) != SI2.Siblings.end();
   };
 
