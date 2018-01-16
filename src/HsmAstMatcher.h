@@ -5,5 +5,5 @@
 
 namespace HsmAstMatcher {
 void addMatchers(clang::ast_matchers::MatchFinder &Finder,
-                 StateTransitionMap &Map);
+                 StateTransitionMap &Map, StateMetadataMap &MetadataMap);
 }

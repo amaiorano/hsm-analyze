@@ -54,6 +54,10 @@ std::string getAttributesForTransition(TransitionType TransType) {
   return Result;
 }
 
+std::string getAttributesForInnerOrdering() {
+  return R"(weight="300",penwidth="0.0",arrowhead="none")";
+}
+
 // Replaces all invalid characters with underscores
 std::string makeValidDotNodeName(std::string Name) {
   for (size_t i = 0; i < Name.size(); ++i) {
@@ -122,23 +126,55 @@ TargetType hash(const SourceType &Val) {
 template <typename T> constexpr T maxValue(T &V) {
   return std::numeric_limits<T>::max();
 }
+
+// Our graph is a map of state names to StateInfo
+struct StateInfo {
+  std::string Name;
+  int _Depth = 0;
+  std::set<StateInfo *> Inners;
+  std::set<StateInfo *> Siblings;
+};
+
+void collectAllSiblings(StateInfo &Curr, std::set<StateInfo *> &Result) {
+  Result.insert(&Curr);
+  for (auto Sibling : Curr.Siblings) {
+    if (Result.find(Sibling) == Result.end()) {
+      collectAllSiblings(*Sibling, Result);
+    }
+  }
+}
+
+std::set<StateInfo *> collectAllImmediateInners(StateInfo &Outer) {
+  std::set<StateInfo *> Result;
+  for (auto Inner : Outer.Inners) {
+    collectAllSiblings(*Inner, Result);
+  }
+  return Result;
+}
+
+// Returns vector with duplicates removed (unstable)
+template <typename T>
+std::vector<T> removeDuplicates(const std::vector<T> &Vec) {
+  std::set<T> Set{Vec.begin(), Vec.end()};
+  std::vector<T> Result{Set.begin(), Set.end()};
+  return Result;
+}
+
 } // namespace
 
 namespace DotGenerator {
-std::string generateDotFileContents(const StateTransitionMap &Map) {
+std::string generateDotFileContents(const StateTransitionMap &Map,
+                                    const StateMetadataMap &MetadataMap) {
+
+  //@TODO: Make CLI arg
+  bool OrderNodesLeftToRight = true;
+
   // We'd like GraphViz to generate a graph where states at the same depth are
   // placed at the same level (row or column, depending on rankdir). To do this,
   // we need to compute each state's maximal depth. We do this first by building
   // a graph containing the list of siblings and immediate inners for each
   // state. Then we traverse the graph and incrementally assign maximal depth to
   // each state.
-
-  // Our graph is a map of state names to StateInfo
-  struct StateInfo {
-    int _Depth = 0;
-    std::set<StateInfo *> Inners;
-    std::set<StateInfo *> Siblings;
-  };
 
   std::map<std::string, StateInfo> StateInfoMap;
 
@@ -149,6 +185,9 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
     auto TargetStateName = std::get<1>(Kvp.second);
     auto &SourceStateInfo = StateInfoMap[SourceStateName];
     auto &TargetStateInfo = StateInfoMap[TargetStateName];
+
+    SourceStateInfo.Name = SourceStateName;
+    TargetStateInfo.Name = TargetStateName;
 
     switch (TransType) {
     case TransitionType::Inner:
@@ -245,41 +284,105 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
   };
 
   // Write the dot file header
-  std::string Result = "strict digraph G {\n"
-                       "  fontname=Helvetica;\n"
-                       "  nodesep=0.6;\n"
-                       "  //rankdir=LR\n"
-                       "";
+  std::string Result =
+      FormatString<>("digraph G {\n"
+                     "  fontname=Helvetica;\n"
+                     "  nodesep=0.6;\n"
+                     "  %s\n"
+                     "\n",
+                     OrderNodesLeftToRight ? "rankdir=LR" : "//rankdir=LR");
 
   // Write all the graph edges
 
-  std::set<std::string> PingPongStatesWritten;
+  // To ensure states are ordered by declaration in cpp files, we create
+  // invisible edges between outers and inners, sorted by source line number
+  {
+    Result +=
+        "  // Invisible edges from outer to every immediate inner to force "
+        "ordering\n";
 
-  for (auto &Kvp : Map) {
-    auto SourceStateName = Kvp.first;
-    auto TransType = std::get<0>(Kvp.second);
-    auto TargetStateName = std::get<1>(Kvp.second);
-
-    std::string Attributes = getAttributesForTransition(TransType);
-
-    // If source and target are ping-pong siblings, only write the first edge
-    // with attribute dir="both", which instructs GraphViz to make a
-    // double-ended edge between the two nodes
-    if (arePingPongSiblings(SourceStateName, TargetStateName)) {
-      if (PingPongStatesWritten.find(TargetStateName) !=
-          PingPongStatesWritten.end())
-        continue;
-
-      PingPongStatesWritten.insert(SourceStateName);
-
-      Attributes += R"(, dir="both")";
+    // Create a list of states sorted by depth (outermost to innermost)
+    std::vector<std::string> DepthSortedStates;
+    for (auto &Kvp : Map) {
+      DepthSortedStates.push_back(Kvp.first);
     }
+    DepthSortedStates = removeDuplicates(DepthSortedStates);
 
-    Result += FormatString<>(
-        "  %s -> %s [%s]\n", makeValidDotNodeName(SourceStateName).c_str(),
-        makeValidDotNodeName(TargetStateName).c_str(), Attributes.c_str());
+    std::sort(DepthSortedStates.begin(), DepthSortedStates.end(),
+              [&](auto &Lhs, auto &Rhs) {
+                return StateInfoMap[Lhs]._Depth < StateInfoMap[Rhs]._Depth;
+              });
+
+    // Unfortunatley, when dot renders nodes left to right, it orders nodes
+    // upside down, so we reverse the list in that case
+    if (OrderNodesLeftToRight)
+      std::reverse(DepthSortedStates.begin(), DepthSortedStates.end());
+
+    for (const auto &StateName : DepthSortedStates) {
+      // Collect all inner states and sort by source line number
+      auto Inners = collectAllImmediateInners(StateInfoMap[StateName]);
+
+      std::vector<std::string> LineSortedInnerStates;
+      for (const auto &Inner : Inners) {
+        LineSortedInnerStates.push_back(Inner->Name);
+      }
+
+      std::sort(LineSortedInnerStates.begin(), LineSortedInnerStates.end(),
+                [&](auto &Lhs, auto &Rhs) {
+                  return MetadataMap.at(Lhs).SourceLineNumber <
+                         MetadataMap.at(Rhs).SourceLineNumber;
+                });
+      if (OrderNodesLeftToRight) {
+        std::reverse(LineSortedInnerStates.begin(),
+                     LineSortedInnerStates.end());
+      }
+
+      for (const auto &InnerState : LineSortedInnerStates) {
+
+        std::string Attributes = getAttributesForInnerOrdering();
+
+        Result += FormatString<>("  %s -> %s [%s] // LineNum: %u\n",
+                                 makeValidDotNodeName(StateName).c_str(),
+                                 makeValidDotNodeName(InnerState).c_str(),
+                                 Attributes.c_str(),
+                                 MetadataMap.at(InnerState).SourceLineNumber);
+      }
+    }
+    Result += '\n';
   }
-  Result += '\n';
+
+  // Write out state-transition edges
+  {
+    Result += "  // State-transition edges\n";
+
+    std::set<std::string> PingPongStatesWritten;
+
+    for (auto &Kvp : Map) {
+      auto SourceStateName = Kvp.first;
+      auto TransType = std::get<0>(Kvp.second);
+      auto TargetStateName = std::get<1>(Kvp.second);
+
+      std::string Attributes = getAttributesForTransition(TransType);
+
+      // If source and target are ping-pong siblings, only write the first edge
+      // with attribute dir="both", which instructs GraphViz to make a
+      // double-ended edge between the two nodes
+      if (arePingPongSiblings(SourceStateName, TargetStateName)) {
+        if (PingPongStatesWritten.find(TargetStateName) !=
+            PingPongStatesWritten.end())
+          continue;
+
+        PingPongStatesWritten.insert(SourceStateName);
+
+        Attributes += R"(, dir="both")";
+      }
+
+      Result += FormatString<>(
+          "  %s -> %s [%s]\n", makeValidDotNodeName(SourceStateName).c_str(),
+          makeValidDotNodeName(TargetStateName).c_str(), Attributes.c_str());
+    }
+    Result += '\n';
+  }
 
   // Now write out subgraphs to set rank per state
 

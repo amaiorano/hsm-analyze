@@ -37,12 +37,41 @@ std::string stringRemove(const std::string &S, const std::string &ToRemove) {
   return Result;
 }
 
-std::string getName(const TemplateArgument &TA) {
-  auto Name = TA.getAsType().getAsString();
-  return stringRemove(stringRemove(Name, "struct "), "clang ");
+template <typename KeyType, typename ValueType>
+bool addUnique(std::multimap<KeyType, ValueType> &MultiMap, const KeyType &Key,
+               ValueType Value) {
+  auto EndIter = MultiMap.upper_bound(Key);
+  for (auto Iter = MultiMap.lower_bound(Key); Iter != EndIter; ++Iter) {
+    if (Iter->second == Value)
+      return false;
+  }
+
+  MultiMap.insert(std::make_pair(Key, std::move(Value)));
+  return true;
 }
 
-inline TransitionType fuzzyNameToTransitionType(const StringRef &Name) {
+CXXRecordDecl *templateArgumentAsRecordDecl(const TemplateArgument &TA) {
+  if (TA.getKind() != TemplateArgument::Type)
+    return nullptr;
+
+  return TA.getAsType().getCanonicalType()->getAsCXXRecordDecl();
+}
+
+CXXRecordDecl *
+getTransitionFuncArgAsRecordDecl(const FunctionDecl &TransitionFuncDecl) {
+  // We currently only support transition functions that accept target state
+  // as a template parameter.
+  // @TODO: support transition functions that accept StateFactory (e.g. state
+  // overrides).
+  const auto TSI = TransitionFuncDecl.getTemplateSpecializationInfo();
+  if (!TSI)
+    return nullptr;
+
+  const TemplateArgument &TA = TSI->TemplateArguments->get(0);
+  return templateArgumentAsRecordDecl(TA);
+}
+
+TransitionType fuzzyNameToTransitionType(const StringRef &Name) {
   auto contains = [](auto stringRef, auto s) {
     return stringRef.find(s) != StringRef::npos;
   };
@@ -82,11 +111,19 @@ const auto StateTransitionMatcher = callExpr(
 class StateTransitionMapper : public MatchFinder::MatchCallback {
   std::map<const CallExpr *, std::string> _CallExprToTargetState;
   StateTransitionMap &_StateTransitionMap;
+  StateMetadataMap &_StateMetadataMap;
 
 public:
-  StateTransitionMapper(StateTransitionMap &Map) : _StateTransitionMap(Map) {}
+  StateTransitionMapper(StateTransitionMap &Map, StateMetadataMap &MetadataMap)
+      : _StateTransitionMap(Map), _StateMetadataMap(MetadataMap) {}
 
   virtual void run(const MatchFinder::MatchResult &Result) {
+    auto updateStateMetadata = [&](const CXXRecordDecl &StateDecl) {
+      auto Name = getName(StateDecl);
+      auto Loc = Result.Context->getFullLoc(StateDecl.getLocation());
+      _StateMetadataMap[Name].SourceLineNumber = Loc.getSpellingLineNumber();
+    };
+
     const auto StateDecl = Result.Nodes.getNodeAs<CXXRecordDecl>("state");
     const auto TransCallExpr = Result.Nodes.getNodeAs<CallExpr>("call_expr");
     const auto TransitionFuncDecl =
@@ -101,18 +138,15 @@ public:
     const auto TransType = fuzzyNameToTransitionType(
         TransitionFuncDecl->getCanonicalDecl()->getName());
 
+    auto TargetStateDecl =
+        getTransitionFuncArgAsRecordDecl(*TransitionFuncDecl);
+    assert(TargetStateDecl);
+
+    updateStateMetadata(*StateDecl);
+    updateStateMetadata(*TargetStateDecl);
+
     auto SourceStateName = getName(*StateDecl);
-
-    // We currently only support transition functions that accept target state
-    // as a template parameter.
-    // @TODO: support transition functions that accept StateFactory (e.g. state
-    // overrides).
-    const auto TSI = TransitionFuncDecl->getTemplateSpecializationInfo();
-    if (!TSI)
-      return;
-    const TemplateArgument &TA = TSI->TemplateArguments->get(0);
-
-    const auto TargetStateName = getName(TA);
+    auto TargetStateName = getName(*TargetStateDecl);
 
     // If our transition is a state arg, we get the top-most transition's
     // target state and assume that this target state is the one that will
@@ -134,15 +168,28 @@ public:
       SourceStateName = iter->second;
     }
 
-    _StateTransitionMap.insert(std::make_pair(
-        SourceStateName, std::make_tuple(TransType, TargetStateName)));
+    addUnique(_StateTransitionMap, SourceStateName,
+              std::make_tuple(TransType, TargetStateName));
+
+    // auto value = std::make_tuple(TransType, TargetStateName);
+    // auto endIter = _StateTransitionMap.upper_bound(SourceStateName);
+    // for (auto iter = _StateTransitionMap.lower_bound(SourceStateName);
+    //     iter != endIter; ++iter) {
+    //  if (iter->second == value)
+    //    break;
+    //}
+
+    //_StateTransitionMap.insert(std::make_pair(
+    //    SourceStateName, std::make_tuple(TransType, TargetStateName)));
   }
 };
+
 } // namespace
 
 namespace HsmAstMatcher {
-void addMatchers(MatchFinder &Finder, StateTransitionMap &Map) {
-  static StateTransitionMapper Mapper(Map);
+void addMatchers(MatchFinder &Finder, StateTransitionMap &Map,
+                 StateMetadataMap &MetadataMap) {
+  static StateTransitionMapper Mapper(Map, MetadataMap);
   Finder.addMatcher(StateTransitionMatcher, &Mapper);
 }
-}
+} // namespace HsmAstMatcher

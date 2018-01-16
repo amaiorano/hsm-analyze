@@ -51,8 +51,9 @@ int main(int argc, const char **argv) {
   }
 
   StateTransitionMap Map;
+  StateMetadataMap MetadataMap;
   MatchFinder Finder;
-  HsmAstMatcher::addMatchers(Finder, Map);
+  HsmAstMatcher::addMatchers(Finder, Map, MetadataMap);
 
   auto Result = Tool.run(newFrontendActionFactory(&Finder).get());
   if (Result != 0) {
@@ -65,15 +66,18 @@ int main(int argc, const char **argv) {
       auto TransType = std::get<0>(kvp.second);
       auto TargetStateName = std::get<1>(kvp.second);
 
-      llvm::outs() << SourceStateName << " "
+      llvm::outs() << SourceStateName << " ("
+                   << MetadataMap[SourceStateName].SourceLineNumber << ") "
                    << TransitionTypeVisualString[static_cast<int>(TransType)]
-                   << " " << TargetStateName << "\n";
+                   << " " << TargetStateName << " ("
+                   << MetadataMap[TargetStateName].SourceLineNumber << ")\n";
       llvm::outs().flush();
     }
   }
 
   if (PrintDotFile) {
-    auto DotFileContents = DotGenerator::generateDotFileContents(Map);
+    auto DotFileContents =
+        DotGenerator::generateDotFileContents(Map, MetadataMap);
     llvm::outs() << DotFileContents;
     llvm::outs().flush();
   }
