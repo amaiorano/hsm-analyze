@@ -3,5 +3,10 @@
 #include "HsmTypes.h"
 
 namespace DotGenerator {
-std::string generateDotFileContents(const StateTransitionMap &Map);
-}
+struct Options {
+  bool LeftRightOrdering = false; // Dot orders top to bottom by default
+};
+
+std::string generateDotFileContents(const StateTransitionMap &Map,
+                                    const Options &Options = {});
+} // namespace DotGenerator

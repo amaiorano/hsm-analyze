@@ -125,7 +125,8 @@ template <typename T> constexpr T maxValue(T &V) {
 } // namespace
 
 namespace DotGenerator {
-std::string generateDotFileContents(const StateTransitionMap &Map) {
+std::string generateDotFileContents(const StateTransitionMap &Map,
+                                    const Options &Options) {
   // We'd like GraphViz to generate a graph where states at the same depth are
   // placed at the same level (row or column, depending on rankdir). To do this,
   // we need to compute each state's maximal depth. We do this first by building
@@ -245,11 +246,13 @@ std::string generateDotFileContents(const StateTransitionMap &Map) {
   };
 
   // Write the dot file header
-  std::string Result = "strict digraph G {\n"
-                       "  fontname=Helvetica;\n"
-                       "  nodesep=0.6;\n"
-                       "  //rankdir=LR\n"
-                       "";
+  std::string Result =
+      FormatString<>("strict digraph G {\n"
+                     "  fontname=Helvetica;\n"
+                     "  nodesep=0.6;\n"
+                     "  %s\n"
+                     "",
+                     Options.LeftRightOrdering ? "rankdir=LR" : "");
 
   // Write all the graph edges
 

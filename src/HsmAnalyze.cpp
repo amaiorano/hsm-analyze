@@ -28,6 +28,10 @@ static cl::opt<bool>
     PrintDotFile("dot", cl::desc("Print state-transition dot file contents"),
                  cl::cat(HsmAnalyzeCategory));
 
+static cl::opt<bool> DotLeftRightOrdering(
+    "lr", cl::desc("dot option: left-right ordering (default is top-down)"),
+    cl::cat(HsmAnalyzeCategory));
+
 static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 
 static void PrintVersion() {
@@ -73,7 +77,9 @@ int main(int argc, const char **argv) {
   }
 
   if (PrintDotFile) {
-    auto DotFileContents = DotGenerator::generateDotFileContents(Map);
+    DotGenerator::Options Options;
+    Options.LeftRightOrdering = DotLeftRightOrdering;
+    auto DotFileContents = DotGenerator::generateDotFileContents(Map, Options);
     llvm::outs() << DotFileContents;
     llvm::outs().flush();
   }
